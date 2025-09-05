@@ -1,0 +1,79 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+  <title>{% block title %}PSI Vision{% endblock %}</title>
+
+  <!-- Tailwind (CDN for now; swap for build later) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+
+  <!-- Favicon (optional) -->
+  <link rel="icon" href="{% static 'img/favicon.ico' %}">
+
+  <!-- CSRF helper for JS -->
+  <script>
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+    window.CSRF_TOKEN = getCookie('csrftoken');
+  </script>
+
+  {% block head %}{% endblock %}
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans antialiased">
+  <!-- Header -->
+  <header class="bg-white shadow">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center py-4">
+        <!-- Brand -->
+        
+        <div class="flex items-center gap-2">
+        <img src="https://content.app-sources.com/s/56088136855320355/uploads/Backdrop/PSI_1-4919080.png?format=webp"
+            alt="PSI Logo"
+            class="h-8 w-auto md:h-10">
+        <span class="font-bold text-lg text-emerald-700">PSI Vision</span>
+        </div>
+
+        <!-- Right slot (user menu / nav) -->
+        <div>
+          {% block header_actions %}{% endblock %}
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="min-h-screen">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t mt-12">
+    <div class="max-w-7xl mx-auto px-4 py-6 text-sm text-gray-500 flex justify-between">
+      <span>&copy; {{ year|default:2025 }} PSI Vision</span>
+      <span>
+        <a href="#" class="hover:text-emerald-600">Privacy</a>
+      </span>
+    </div>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
