@@ -25,7 +25,16 @@ SECRET_KEY = 'django-insecure-f@4-*j3j=3#m%a_)#wiw9)1p==lmx^y0l^(#h5iutcxe=_-or#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "psiai-production.up.railway.app",  # your Railway app
+    "127.0.0.1",                        # local dev
+    "localhost",                        # local dev
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://psiai-production.up.railway.app",
+]
+
 
 
 # Application definition
