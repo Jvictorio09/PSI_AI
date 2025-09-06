@@ -1,0 +1,977 @@
+{% extends "base_app.html" %}
+{% block title %}Workshop — PSI Vision{% endblock %}
+
+{% block content %}
+
+<style>
+  /* Card tiles */
+  .ob-card{
+    position:relative; overflow:hidden; border-radius:12px;
+    border:1px solid #e5e7eb; background:#fff; text-align:left;
+    box-shadow:0 1px 2px rgba(0,0,0,.06); transition:box-shadow .2s, transform .2s, outline-color .2s;
+    outline:2px solid transparent; outline-offset:0;
+  }
+  .ob-card:hover{ box-shadow:0 6px 14px rgba(0,0,0,.10); transform:translateY(-1px); }
+  .ob-card.selected{ outline-color:#FBC52C; box-shadow:0 8px 18px rgba(0,0,0,.12); }
+
+  .ob-img{ width:100%; height:7rem; object-fit:cover; }
+  @media (min-width: 640px){ .ob-img{ height:8rem; } }
+
+  .ob-label{
+    position:absolute; bottom:.5rem; left:.5rem;
+    font-size:.75rem; font-weight:600; color:#fff;
+    background:rgba(0,0,0,.5); padding:.25rem .5rem; border-radius:.375rem;
+  }
+
+  /* Darken selected images + add a check badge */
+  .ob-card.selected .ob-img{ filter:brightness(.75) saturate(1.05); }
+  .ob-card.selected::after{
+    content:"✓"; position:absolute; top:.5rem; right:.5rem;
+    width:1.5rem; height:1.5rem; border-radius:9999px;
+    background:#FBC52C; color:#1A237E; display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:.9rem; box-shadow:0 2px 6px rgba(0,0,0,.20);
+  }
+
+  /* Region chips */
+  .ob-chip{
+    padding:.5rem .75rem; border-radius:.5rem; border:1px solid #e5e7eb;
+    font-size:.875rem; color:#374151; transition:background .2s, border-color .2s;
+  }
+  .ob-chip:hover{ background:#f9fafb; }
+  .ob-chip.selected{ border-color:#FBC52C; background:#FFF8E1; }
+</style>
+
+
+
+<div class="min-h-screen text-gray-900 flex flex-col md:flex-row">
+
+  <!-- Mobile top bar -->
+  <header class="md:hidden bg-white border-b flex items-center justify-between px-4 py-3 shadow-sm">
+    <div class="flex items-center gap-2">
+      <img src="https://content.app-sources.com/s/56088136855320355/uploads/Backdrop/PSI_1-4919080.png?format=webp"
+           class="h-6 w-auto" alt="PSI Logo">
+      <span class="font-semibold text-[#1A237E]">PSI Vision</span>
+    </div>
+    <button id="mobile-menu-toggle" class="text-gray-600">
+      <i class="fa-solid fa-bars text-xl"></i>
+    </button>
+  </header>
+
+  <!-- Sidebar (desktop only) -->
+  <aside class="hidden md:flex w-60 bg-white border-r flex-col">
+    <div class="flex items-center gap-2 p-6 border-b">
+      <img src="https://content.app-sources.com/s/56088136855320355/uploads/Backdrop/PSI_1-4919080.png?format=webp"
+           class="h-7 w-auto" alt="PSI Logo">
+      <span class="font-semibold text-lg text-[#1A237E]">PSI Vision</span>
+    </div>
+
+    <nav class="flex-1 px-3 py-6 space-y-1 text-sm font-medium">
+      <a href="#" class="flex items-center gap-3 px-3 py-2 border-l-4 border-[#FBC52C] bg-gray-50 text-[#1A237E]">
+        <i class="fa-solid fa-comments"></i> Chat
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2 text-gray-700 hover:bg-gray-50 hover:border-l-4 hover:border-[#FBC52C]">
+        <i class="fa-solid fa-image"></i> My Vision
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2 text-gray-700 hover:bg-gray-50 hover:border-l-4 hover:border-[#FBC52C]">
+        <i class="fa-solid fa-th"></i> Gallery
+      </a>
+      {% if request.user.is_staff %}
+      <a href="#" class="flex items-center gap-3 px-3 py-2 text-gray-700 hover:bg-gray-50 hover:border-l-4 hover:border-[#FBC52C]">
+        <i class="fa-solid fa-chart-line"></i> Facilitator
+      </a>
+      {% endif %}
+      <!-- In your sidebar nav -->
+      <button type="button" id="open-profile"
+        class="w-full flex items-center gap-3 px-3 py-2 text-gray-700 hover:bg-gray-50 hover:border-l-4 hover:border-[#FBC52C]">
+        <i class="fa-solid fa-user-gear"></i> Profile
+      </button>
+
+    </nav>
+
+    <div class="p-4 border-t text-sm flex items-center justify-between">
+      <span class="text-gray-500 truncate">{{ request.user.username }}</span>
+      <a href="{% url 'logout' %}" class="text-[#1A237E] hover:underline">Logout</a>
+    </div>
+  </aside>
+
+  <!-- Main: grid-centered chat -->
+  <div class="flex-1 flex flex-col bg-[#F5F7FA]">
+
+    <!-- Chat area -->
+    <main class="flex-1 overflow-y-auto px-2 sm:px-6 md:px-10 py-6">
+      <div class="grid grid-cols-12 gap-4">
+        <!-- Center column -->
+        <div class="col-span-12 lg:col-span-8 lg:col-start-3 xl:col-span-6 xl:col-start-4">
+          <div id="chat-messages" class="flex flex-col space-y-6">
+            <!-- Empty state -->
+            <div id="empty-state" class="text-center text-gray-400 text-sm py-10">
+              <i class="fa-solid fa-sparkles mb-2 text-[#FBC52C] text-xl"></i>
+              <p>Start your vision journey…</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Sticky input / mode -->
+    <div class="border-t bg-white sticky bottom-0 w-full">
+      <div class="px-2 sm:px-6 md:px-10 py-4">
+        <div class="grid grid-cols-12">
+          <div class="col-span-12 lg:col-span-8 lg:col-start-3 xl:col-span-6 xl:col-start-4">
+            <!-- Mode toggle -->
+            <div class="flex justify-center gap-2 mb-2">
+              <button type="button" id="mode-chat"
+                class="px-4 py-1 rounded-full text-sm font-medium bg-[#1A237E] text-white">
+                <i class="fa-solid fa-comments"></i> Chat
+              </button>
+              <button type="button" id="mode-image"
+                class="px-4 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200">
+                <i class="fa-solid fa-image"></i> Generate Image
+              </button>
+            </div>
+
+            <!-- Input -->
+            <form id="chat-form" class="flex gap-2">
+              <input type="text" placeholder="Type your vision..."
+                     class="flex-1 rounded-full border border-gray-300 focus:ring-[#FBC52C] focus:border-[#FBC52C] text-sm px-4 py-2">
+              <button class="bg-[#1A237E] text-white w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#151d66] transition">
+                <i class="fa-solid fa-paper-plane"></i>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- Onboarding Modal (hidden by default) -->
+<!-- Onboarding Quiz (drop-in replacement) -->
+<div id="onboard-overlay" class="fixed inset-0 z-[60] hidden">
+  <!-- Backdrop -->
+  <div class="absolute inset-0 bg-black/50"></div>
+
+  <!-- Dialog -->
+  <div role="dialog" aria-modal="true"
+       class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden border">
+
+      <!-- Header / Progress -->
+      <div class="bg-gradient-to-r from-[#1A237E] to-[#2c3aa0] text-white px-6 py-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg sm:text-xl font-semibold">Welcome to PSI Vision ✨</h2>
+          <span id="ob-step-label" class="text-sm opacity-90">Step 1 of 4</span>
+        </div>
+        <div class="mt-3 h-2 w-full bg-white/20 rounded-full overflow-hidden">
+          <div id="ob-progress" class="h-2 bg-[#FBC52C] rounded-full w-1/4"></div>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <form id="onboard-form" class="p-6 space-y-6">
+
+        <!-- Step 1: Age group -->
+        <section data-step="1" class="ob-step grid gap-4">
+          <div>
+            <h3 class="text-lg font-semibold text-[#1A237E]">How should we portray your age?</h3>
+            <p class="text-sm text-gray-600">Pick one that feels right.</p>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <!-- Card template: data-target + data-value -->
+            <button type="button" data-target="age_group" data-value="teen"
+              class="ob-card group">
+              <img class="ob-img" src="https://picsum.photos/seed/teen/400/260" alt="">
+              <span class="ob-label">Teen</span>
+            </button>
+            <button type="button" data-target="age_group" data-value="20s" class="ob-card group">
+              <img class="ob-img" src="https://picsum.photos/seed/twenties/400/260" alt="">
+              <span class="ob-label">20s</span>
+            </button>
+            <button type="button" data-target="age_group" data-value="30s" class="ob-card group">
+              <img class="ob-img" src="https://picsum.photos/seed/thirties/400/260" alt="">
+              <span class="ob-label">30s</span>
+            </button>
+            <button type="button" data-target="age_group" data-value="40s" class="ob-card group">
+              <img class="ob-img" src="https://picsum.photos/seed/forties/400/260" alt="">
+              <span class="ob-label">40s</span>
+            </button>
+            <button type="button" data-target="age_group" data-value="50s" class="ob-card group">
+              <img class="ob-img" src="https://picsum.photos/seed/fifties/400/260" alt="">
+              <span class="ob-label">50s</span>
+            </button>
+            <button type="button" data-target="age_group" data-value="60plus" class="ob-card group">
+              <img class="ob-img" src="https://picsum.photos/seed/sixty/400/260" alt="">
+              <span class="ob-label">60+</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Step 2: Style vibe -->
+        <section data-step="2" class="ob-step hidden space-y-4">
+          <div>
+            <h3 class="text-lg font-semibold text-[#1A237E]">Pick your vibe</h3>
+            <p id="ob-style-hint" class="text-xs text-gray-500">
+  Pick at least <span id="ob-style-min">3</span> vibes
+  (<span id="ob-style-count">0</span> selected)
+</p>
+
+            <p class="text-sm text-gray-600">We’ll use this to style images.</p>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <button type="button" class="ob-card" data-group="style" data-chip="minimalist">
+              <img class="ob-img" src="https://picsum.photos/seed/minimal/400/260" alt="">
+              <span class="ob-label">Minimalist</span>
+            </button>
+            <button type="button" class="ob-card" data-group="style" data-chip="cinematic">
+              <img class="ob-img" src="https://picsum.photos/seed/cinema/400/260" alt="">
+              <span class="ob-label">Cinematic</span>
+            </button>
+            <button type="button" class="ob-card" data-group="style" data-chip="vibrant">
+              <img class="ob-img" src="https://picsum.photos/seed/vibrant/400/260" alt="">
+              <span class="ob-label">Vibrant</span>
+            </button>
+            <button type="button" class="ob-card" data-group="style" data-chip="pastel">
+              <img class="ob-img" src="https://picsum.photos/seed/pastel/400/260" alt="">
+              <span class="ob-label">Pastel</span>
+            </button>
+            <button type="button" class="ob-card" data-group="style" data-chip="documentary">
+              <img class="ob-img" src="https://picsum.photos/seed/docu/400/260" alt="">
+              <span class="ob-label">Documentary</span>
+            </button>
+            <button type="button" class="ob-card" data-group="style" data-chip="illustrated">
+              <img class="ob-img" src="https://picsum.photos/seed/illustrated/400/260" alt="">
+              <span class="ob-label">Illustrated</span>
+            </button>
+          </div>
+
+          <div>
+            <label class="text-sm text-gray-600">Add your own keywords (optional)</label>
+            <input type="text" id="ob-style-extra"
+              class="mt-1 w-full border rounded-md p-2"
+              placeholder="e.g. soft lighting, film grain, cozy" />
+            <p class="text-xs text-gray-500 mt-1">Comma-separated. We’ll merge them in.</p>
+          </div>
+        </section>
+
+        <!-- Step 3: Region -->
+        <section data-step="3" class="ob-step hidden space-y-4">
+          <div>
+            <h3 class="text-lg font-semibold text-[#1A237E]">Where should we draw inspiration from?</h3>
+            <p class="text-sm text-gray-600">Choose a region.</p>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <button type="button" class="ob-chip" data-target="region" data-value="se_asia">SE Asia</button>
+            <button type="button" class="ob-chip" data-target="region" data-value="e_asia">East Asia</button>
+            <button type="button" class="ob-chip" data-target="region" data-value="s_asia">South Asia</button>
+            <button type="button" class="ob-chip" data-target="region" data-value="middle_east">Middle East</button>
+            <button type="button" class="ob-chip" data-target="region" data-value="europe">Europe</button>
+            <button type="button" class="ob-chip" data-target="region" data-value="africa">Africa</button>
+            <button type="button" class="ob-chip" data-target="region" data-value="n_america">North America</button>
+            <button type="button" class="ob-chip" data-target="region" data-value="latam">Latin America</button>
+            <button type="button" class="ob-chip" data-target="region" data-value="oceania">Oceania</button>
+            <button type="button" class="ob-chip" data-target="region" data-value="na">Prefer not to say</button>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Gender (optional)</label>
+            <select name="gender" class="mt-1 w-full border rounded-md p-2">
+              <option value="">— Select —</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="nonbinary">Non-binary</option>
+              <option value="na">Prefer not to say</option>
+            </select>
+          </div>
+        </section>
+
+        <!-- Step 4: Consent & finish -->
+        <section data-step="4" class="ob-step hidden space-y-4">
+          <div>
+            <h3 class="text-lg font-semibold text-[#1A237E]">Use this info to personalize images?</h3>
+            <p class="text-sm text-gray-600">Totally optional — can change later.</p>
+          </div>
+
+          <label class="flex items-center gap-3">
+            <input type="checkbox" name="consent_use_demographics" class="sr-only" id="ob-consent">
+            <span class="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-300 transition peer-checked:bg-[#1A237E]" data-toggle>
+              <span class="inline-block h-5 w-5 translate-x-1 rounded-full bg-white shadow transition" data-knob></span>
+            </span>
+            <span class="text-sm text-gray-700">Yes, personalize my images</span>
+          </label>
+
+          <div class="text-xs text-gray-500">
+            We store only the choices you make here to tailor prompts. You’re always in control.
+          </div>
+        </section>
+
+        <!-- Hidden inputs that your existing submit handler reads -->
+        <input type="hidden" name="age_group" id="ob-age">
+        <input type="hidden" name="region" id="ob-region">
+        <input type="hidden" name="style_keywords" id="ob-styles">
+
+        <!-- Status line -->
+        <p id="onboard-status" class="text-xs text-gray-500 hidden"></p>
+
+        <!-- Footer actions -->
+        <div class="flex items-center justify-between pt-1">
+          <button type="button" id="ob-back"
+            class="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50">Back</button>
+
+          <div class="flex items-center gap-2">
+            <button type="button" id="onboard-skip"
+              class="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50">Skip</button>
+
+            <!-- Next until final step -->
+            <button type="button" id="ob-next"
+              class="bg-[#1A237E] text-white px-4 py-2 rounded-lg hover:bg-[#151d66]">Next</button>
+
+            <!-- Submit only on last step -->
+            <button type="submit" id="ob-save"
+              class="hidden bg-[#1A237E] text-white px-4 py-2 rounded-lg hover:bg-[#151d66]">
+              Save & Start
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Modal (hidden by default) -->
+<div id="profile-overlay" class="fixed inset-0 z-[70] hidden">
+  <div class="absolute inset-0 bg-black/40"></div>
+
+  <div role="dialog" aria-modal="true" class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="w-full max-w-xl bg-white rounded-2xl shadow-xl border">
+      <div class="p-6 border-b flex items-center justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-[#1A237E]">Profile & Preferences</h2>
+          <p class="text-sm text-gray-600 mt-1">Update what we use to tailor your prompts and images.</p>
+        </div>
+        <button type="button" id="profile-close" class="text-gray-500 hover:text-gray-700">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+
+      <form id="profile-form" class="p-6 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Age group</label>
+            <select name="age_group" class="mt-1 w-full border rounded-md p-2">
+              <option value="">— Select —</option>
+              <option value="teen">Teen</option>
+              <option value="20s">20s</option>
+              <option value="30s">30s</option>
+              <option value="40s">40s</option>
+              <option value="50s">50s</option>
+              <option value="60plus">60+</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Gender</label>
+            <select name="gender" class="mt-1 w-full border rounded-md p-2">
+              <option value="">— Select —</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="nonbinary">Non-binary</option>
+              <option value="na">Prefer not to say</option>
+            </select>
+          </div>
+
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-gray-700">Region</label>
+            <select name="region" class="mt-1 w-full border rounded-md p-2">
+              <option value="">— Select —</option>
+              <option value="se_asia">Southeast Asia</option>
+              <option value="e_asia">East Asia</option>
+              <option value="s_asia">South Asia</option>
+              <option value="middle_east">Middle East</option>
+              <option value="europe">Europe</option>
+              <option value="africa">Africa</option>
+              <option value="n_america">North America</option>
+              <option value="latam">Latin America</option>
+              <option value="oceania">Oceania</option>
+              <option value="na">Prefer not to say</option>
+            </select>
+          </div>
+
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-gray-700">Style keywords</label>
+            <input name="style_keywords" type="text" placeholder="e.g. minimalist, cinematic, soft lighting"
+                   class="mt-1 w-full border rounded-md p-2" />
+            <p class="text-xs text-gray-500 mt-1">Comma-separated. We’ll use these as hints.</p>
+          </div>
+        </div>
+
+        <label class="flex items-start gap-2">
+          <input type="checkbox" name="consent_use_demographics" class="mt-1">
+          <span class="text-sm text-gray-700">Use my demographics to tailor generated images</span>
+        </label>
+
+        <div class="flex items-center justify-between pt-2">
+          <button type="button" id="profile-reonboard"
+                  class="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50">
+            Re-run onboarding
+          </button>
+          <div class="space-x-2">
+            <button type="button" id="profile-cancel"
+                    class="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50">
+              Cancel
+            </button>
+            <button type="submit"
+                    class="bg-[#1A237E] text-white px-4 py-2 rounded-lg hover:bg-[#151d66]">
+              Save
+            </button>
+          </div>
+        </div>
+
+        <p id="profile-status" class="text-xs text-gray-500 mt-2 hidden"></p>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+"use strict";
+
+/* =========================
+   GLOBAL CONFIG + HELPERS
+   ========================= */
+const STYLE_MIN = 3;          // how many vibes required on step 2
+const AUTONEXT_STYLES = true; // auto-advance when min is met
+const SHOULD_ONBOARD = {{ should_onboard|yesno:"true,false" }};
+
+// CSRF (define once)
+function getCookie(name){
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return decodeURIComponent(parts.pop().split(";").shift());
+}
+window.CSRF_TOKEN = window.CSRF_TOKEN || getCookie("csrftoken");
+
+// tiny utils (shared)
+const $  = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+function hasRichFormatting(raw){
+  return /(\*\*.+?\*\*|`.+?`|\n|(^|\s)\d+\.\s|(^|\s)[\-•]\s)/.test(raw);
+}
+function normalizeListBreaks(raw){
+  let t = raw;
+  t = t.replace(/(\S)\s+(\d+)\.\s/g, "$1\n$2. ");
+  t = t.replace(/(\S)\s+([\-•])\s/g, "$1\n$2 ");
+  return t;
+}
+function mdInline(htmlEscaped){
+  htmlEscaped = htmlEscaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  htmlEscaped = htmlEscaped.replace(/`([^`]+)`/g, "<code class='px-1 rounded bg-black/20'>$1</code>");
+  return htmlEscaped;
+}
+function renderMarkdownish(raw){
+  let txt = normalizeListBreaks(raw);
+  const lines = txt.split(/\r?\n/);
+  let htmlParts = [], ol = [], ul = [];
+  const flushLists = () => {
+    if (ol.length){
+      htmlParts.push(`<ol class="list-decimal pl-5 space-y-1">${ol.map(li => `<li>${mdInline(escapeHtml(li))}</li>`).join("")}</ol>`);
+      ol = [];
+    }
+    if (ul.length){
+      htmlParts.push(`<ul class="list-disc pl-5 space-y-1">${ul.map(li => `<li>${mdInline(escapeHtml(li))}</li>`).join("")}</ul>`);
+      ul = [];
+    }
+  };
+  for (let line of lines){
+    const t = line.trim();
+    if (!t){ flushLists(); continue; }
+    const mNum = t.match(/^(\d+)\.\s+(.*)$/);
+    const mBul = t.match(/^[\-•]\s+(.*)$/);
+    if (mNum){ ol.push(mNum[2]); continue; }
+    if (mBul){ ul.push(mBul[1]); continue; }
+    flushLists();
+    htmlParts.push(`<p class="leading-relaxed">${mdInline(escapeHtml(t))}</p>`);
+  }
+  flushLists();
+  return htmlParts.join("");
+}
+function typeWriterEffect(el, text, speed=30){
+  let i = 0;
+  const id = setInterval(() => {
+    el.innerHTML += escapeHtml(text.charAt(i));
+    if (++i >= text.length) clearInterval(id);
+  }, speed);
+}
+function showTypingIndicator(chatBox){
+  const id = "typing-" + Date.now();
+  chatBox?.insertAdjacentHTML("beforeend", `
+    <div id="${id}" class="self-start bg-[#1A237E] px-4 py-3 rounded-2xl text-white max-w-[80%] flex gap-2 shadow">
+      <span class="w-2 h-2 bg-white rounded-full animate-bounce"></span>
+      <span class="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:200ms]"></span>
+      <span class="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:400ms]"></span>
+    </div>
+  `);
+  chatBox?.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" });
+  return id;
+}
+function removeTypingIndicator(id){
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+function urlHasOnboardFlag(){
+  try {
+    const u = new URL(window.location.href);
+    return u.searchParams.get("onboard") === "1" || window.location.hash.includes("#onboard");
+  } catch { return false; }
+}
+
+/* =========================
+   ONBOARDING: helpers
+   ========================= */
+function openOnboarding(){ $('#onboard-overlay')?.classList.remove('hidden'); }
+function closeOnboarding(){ $('#onboard-overlay')?.classList.add('hidden'); }
+
+function setObStatus(msg, isError=false){
+  const el = $('#onboard-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.toggle("hidden", !msg);
+  el.classList.toggle("text-red-600", isError);
+  el.classList.toggle("text-gray-500", !isError);
+}
+
+function formToJson(form){
+  const fd = new FormData(form);
+  const o = {};
+  for (const [k, v] of fd.entries()){
+    if (k === "consent_use_demographics") o[k] = true;
+    else o[k] = (v || "").toString().trim();
+  }
+  if (!fd.has("consent_use_demographics")) o.consent_use_demographics = false;
+  return o;
+}
+
+// POST to onboarding endpoint (csrf_exempt on backend)
+async function postOnboarding(payload){
+  const res = await fetch("{% url 'save_onboarding' %}", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `Failed (${res.status})`);
+  return data;
+}
+
+/* =========================
+   PROFILE: helpers
+   ========================= */
+function openProfile(){ $('#profile-overlay')?.classList.remove('hidden'); }
+function closeProfile(){ $('#profile-overlay')?.classList.add('hidden'); }
+function setProfStatus(msg, isError=false){
+  const el = $('#profile-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.toggle("hidden", !msg);
+  el.classList.toggle("text-red-600", isError);
+  el.classList.toggle("text-gray-500", !isError);
+}
+async function loadProfile(){
+  setProfStatus("Loading…");
+  const res = await fetch("{% url 'profile_get' %}", { headers: { "X-Requested-With": "fetch" }});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `Failed (${res.status})`);
+  const p = data.profile || {};
+  const f = $('#profile-form');
+  if (!f) return;
+  f.age_group.value = p.age_group || "";
+  f.gender.value = p.gender || "";
+  f.region.value  = p.region  || "";
+  f.style_keywords.value = p.style_keywords || "";
+  f.consent_use_demographics.checked = !!p.consent_use_demographics;
+  setProfStatus("");
+}
+async function saveProfile(payload){
+  const res = await fetch("{% url 'profile_save' %}", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `Failed (${res.status})`);
+  return data;
+}
+
+/* =========================
+   ONBOARDING QUIZ CONTROLLER
+   ========================= */
+(function setupOnboardingQuiz(){
+  const obForm     = $('#onboard-form');            if (!obForm) return; // quiz not present
+  const progress   = $('#ob-progress');
+  const stepLabel  = $('#ob-step-label');
+  const btnBack    = $('#ob-back');
+  const btnNext    = $('#ob-next');
+  const btnSave    = $('#ob-save');
+  const btnSkip    = $('#onboard-skip');
+
+  const hidAge     = $('#ob-age');
+  const hidRegion  = $('#ob-region');
+  const hidStyles  = $('#ob-styles');
+  const extraStyles= $('#ob-style-extra');
+
+  const styleMinEl   = $('#ob-style-min');
+  const styleCountEl = $('#ob-style-count');
+
+  const totalSteps = 4;
+  let step = 1;
+  const styleSet = new Set();
+  let extrasCount = 0;
+  let styleTotal  = 0;
+
+  function canProceedFromStyle(){ return styleTotal >= STYLE_MIN; }
+  function updateProgressUI(){
+    if (styleMinEl) styleMinEl.textContent = STYLE_MIN;
+    if (stepLabel) stepLabel.textContent = `Step ${step} of ${totalSteps}`;
+    if (progress)  progress.style.width = `${(step/totalSteps)*100}%`;
+
+    $$('.ob-step').forEach(sec => sec.classList.toggle('hidden', sec.dataset.step !== String(step)));
+
+    if (btnBack) btnBack.disabled = step === 1;
+    if (btnNext) btnNext.classList.toggle('hidden', step === totalSteps);
+    if (btnSave) btnSave.classList.toggle('hidden', step !== totalSteps);
+
+    if (btnNext){
+      if (step === 2){
+        const ok = canProceedFromStyle();
+        btnNext.disabled = !ok;
+        btnNext.classList.toggle('opacity-50', !ok);
+        btnNext.classList.toggle('cursor-not-allowed', !ok);
+      } else {
+        btnNext.disabled = false;
+        btnNext.classList.remove('opacity-50','cursor-not-allowed');
+      }
+    }
+  }
+  function next(){ if (step < totalSteps){ step++; updateProgressUI(); } }
+  function back(){ if (step > 1){ step--; updateProgressUI(); } }
+
+  // Step 1: Age select
+  $$('.ob-card[data-target="age_group"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (hidAge) hidAge.value = btn.dataset.value || "";
+      $$('.ob-card[data-target="age_group"]').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      next();
+    });
+  });
+
+  // Step 2: Vibes
+  function syncStyles(){
+    const extras = (extraStyles?.value || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    extrasCount = extras.length;
+    styleTotal  = styleSet.size + extrasCount;
+    if (hidStyles) hidStyles.value = [...styleSet, ...extras].join(', ');
+    if (styleCountEl) styleCountEl.textContent = String(styleTotal);
+
+    if (step === 2 && btnNext){
+      const ok = canProceedFromStyle();
+      btnNext.disabled = !ok;
+      btnNext.classList.toggle('opacity-50', !ok);
+      btnNext.classList.toggle('cursor-not-allowed', !ok);
+    }
+  }
+  $$('.ob-card[data-group="style"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.chip;
+      if (!key) return;
+      if (styleSet.has(key)){
+        styleSet.delete(key);
+        btn.classList.remove('selected');
+      } else {
+        styleSet.add(key);
+        btn.classList.add('selected');
+      }
+      syncStyles();
+      if (step === 2 && AUTONEXT_STYLES && canProceedFromStyle()) next();
+    });
+  });
+  extraStyles?.addEventListener('input', syncStyles);
+
+  // Step 3: Region chips
+  $$('.ob-chip[data-target="region"]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      if (hidRegion) hidRegion.value = chip.dataset.value || "";
+      $$('.ob-chip[data-target="region"]').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      next();
+    });
+  });
+
+  // Step 4: Consent toggle
+  (function(){
+    const consent = $('#ob-consent');
+    const toggle  = document.querySelector('[data-toggle]');
+    const knob    = document.querySelector('[data-knob]');
+    toggle?.addEventListener('click', () => {
+      if (!consent || !toggle || !knob) return;
+      consent.checked = !consent.checked;
+      toggle.classList.toggle('bg-[#1A237E]', consent.checked);
+      toggle.classList.toggle('bg-gray-300', !consent.checked);
+      knob.style.transform = consent.checked ? 'translateX(22px)' : 'translateX(4px)';
+    });
+    if (knob) knob.style.transform = 'translateX(4px)';
+  })();
+
+  // Nav buttons
+  btnNext?.addEventListener('click', () => {
+    if (step === 2 && !canProceedFromStyle()){
+      setObStatus(`Pick at least ${STYLE_MIN} vibe${STYLE_MIN>1?'s':''} to continue.`, true);
+      setTimeout(() => setObStatus('', false), 1600);
+      return;
+    }
+    next();
+  });
+  btnBack?.addEventListener('click', back);
+
+  // Skip button -> mark onboarded with blanks
+  btnSkip?.addEventListener('click', async () => {
+    setObStatus("Skipping…");
+    try {
+      await postOnboarding({});
+      setObStatus("");
+      closeOnboarding();
+      const chatBox = $('#chat-messages');
+      chatBox?.insertAdjacentHTML("beforeend", `
+        <div class="self-start bg-[#1A237E] px-5 py-3 rounded-2xl text-white max-w-[80%] shadow">
+          No worries — we can personalize later. Tell me a vision and I’ll get creating.
+        </div>
+      `);
+      chatBox?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
+    } catch (err) {
+      setObStatus(err.message || "Couldn’t skip.", true);
+    }
+  });
+
+  // Final submit
+  obForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setObStatus("Saving…");
+    try {
+      const payload = formToJson(obForm);
+      await postOnboarding(payload);
+      setObStatus("Saved!");
+      closeOnboarding();
+      const chatBox = $('#chat-messages');
+      chatBox?.insertAdjacentHTML("beforeend", `
+        <div class="self-start bg-[#1A237E] px-5 py-3 rounded-2xl text-white max-w-[80%] shadow">
+          Awesome — I’ll tailor images to your profile. What do you want to visualize first?
+        </div>
+      `);
+      chatBox?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
+    } catch (err) {
+      setObStatus(err.message || "Something went wrong.", true);
+    }
+  });
+
+  // init
+  syncStyles();
+  updateProgressUI();
+})();
+
+/* =========================
+   PAGE WIRING (on load)
+   ========================= */
+window.addEventListener("DOMContentLoaded", async () => {
+  // Welcome bubble
+  const chatBox = $('#chat-messages');
+  chatBox?.insertAdjacentHTML("beforeend", `
+    <div class="self-start bg-[#1A237E] px-5 py-3 rounded-2xl text-white max-w-[80%] shadow">
+      Welcome to <strong>PSI Vision</strong> ✨<br/>
+      I’m here to help you dream bigger and visualize your future.<br/>
+      What’s on your mind today?
+    </div>
+  `);
+  chatBox?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
+
+  // Open onboarding on first visit or URL flag
+  if (SHOULD_ONBOARD || urlHasOnboardFlag()) openOnboarding();
+
+  // Prefill onboarding from saved profile
+  (async () => {
+    try {
+      const res = await fetch("{% url 'profile_get' %}");
+      const data = await res.json();
+      if (!data?.ok) return;
+      const p   = data.profile || {};
+      const ob  = $('#onboard-form');
+      if (!ob) return;
+      if (ob.age_group)  ob.age_group.value  = p.age_group || "";
+      if (ob.gender)     ob.gender.value     = p.gender || "";
+      if (ob.region)     ob.region.value     = p.region  || "";
+      if (ob.style_keywords) ob.style_keywords.value = p.style_keywords || "";
+      if (ob.consent_use_demographics) ob.consent_use_demographics.checked = !!p.consent_use_demographics;
+    } catch {}
+  })();
+
+  // Profile modal wiring
+  const btnOpenProfile = $('#open-profile');
+  const btnCloseProf   = $('#profile-close');
+  const btnCancelProf  = $('#profile-cancel');
+  const btnReOnboard   = $('#profile-reonboard');
+  const profileForm    = $('#profile-form');
+
+  btnOpenProfile?.addEventListener("click", async () => {
+    openProfile();
+    try { await loadProfile(); } catch(e){ setProfStatus(e.message || "Could not load profile", true); }
+  });
+  btnCloseProf?.addEventListener("click", closeProfile);
+  btnCancelProf?.addEventListener("click", closeProfile);
+
+  btnReOnboard?.addEventListener("click", async () => {
+    try {
+      await loadProfile();
+      // copy values from profile -> onboarding form (if present)
+      const pf = $('#profile-form');
+      const ob = $('#onboard-form');
+      if (pf && ob){
+        ob.age_group.value  = pf.age_group.value;
+        ob.gender.value     = pf.gender.value;
+        ob.region.value     = pf.region.value;
+        ob.style_keywords.value = pf.style_keywords.value;
+        ob.consent_use_demographics.checked = pf.consent_use_demographics.checked;
+      }
+    } catch {}
+    closeProfile();
+    openOnboarding();
+  });
+
+  profileForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    setProfStatus("Saving…");
+    try {
+      const payload = formToJson(profileForm);
+      payload.onboarded = true; // treat edits as onboarded
+      await saveProfile(payload);
+      setProfStatus("Saved!");
+      setTimeout(closeProfile, 400);
+    } catch (err) {
+      setProfStatus(err.message || "Save failed.", true);
+    }
+  });
+
+  // Chat / Image mode toggle + submit
+  let mode = "chat";
+  const btnChat  = $('#mode-chat');
+  const btnImage = $('#mode-image');
+  const chatForm = $('#chat-form');
+  const input    = chatForm?.querySelector("input");
+
+  btnChat?.addEventListener("click", () => {
+    mode = "chat";
+    btnChat.classList.add("bg-[#1A237E]","text-white");
+    btnChat.classList.remove("bg-gray-100","text-gray-700");
+    btnImage?.classList.add("bg-gray-100","text-gray-700");
+    btnImage?.classList.remove("bg-[#1A237E]","text-white");
+  });
+  btnImage?.addEventListener("click", () => {
+    mode = "image";
+    btnImage.classList.add("bg-[#1A237E]","text-white");
+    btnImage.classList.remove("bg-gray-100","text-gray-700");
+    btnChat?.classList.add("bg-gray-100","text-gray-700");
+    btnChat?.classList.remove("bg-[#1A237E]","text-white");
+  });
+
+  chatForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const message = (input?.value || "").trim();
+    if (!message) return;
+
+    chatBox?.insertAdjacentHTML("beforeend", `
+      <div class="self-end bg-white border border-gray-200 px-5 py-3 rounded-2xl shadow-sm text-gray-800 max-w-[80%]">
+        ${escapeHtml(message)}
+      </div>
+    `);
+    if (input) input.value = "";
+
+    const typingId = showTypingIndicator(chatBox);
+
+    try {
+      const endpoint = mode === "chat" ? "{% url 'chat_ai' %}" : "{% url 'generate_vision' %}";
+      const payload  = mode === "chat" ? { message } : { vision: message, size: "1024x1024" };
+      const headers  = { "Content-Type": "application/json" };
+      if (mode === "chat" && window.CSRF_TOKEN) headers["X-CSRFToken"] = window.CSRF_TOKEN;
+
+      const res  = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payload) });
+      const data = await res.json().catch(() => ({}));
+      removeTypingIndicator(typingId);
+
+      if (!res.ok){
+        const errMsg = data?.error || `Request failed (${res.status})`;
+        chatBox?.insertAdjacentHTML("beforeend", `
+          <div class="self-start bg-red-50 text-red-700 px-4 py-3 rounded-2xl border border-red-200 max-w-[90%]">
+            <strong>Whoops.</strong> ${escapeHtml(errMsg)}
+          </div>
+        `);
+        chatBox?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
+
+      if (mode === "chat"){
+        const reply = data.reply || "";
+        const rich = hasRichFormatting(reply);
+        const bubbleId = "ai-" + Date.now();
+        chatBox?.insertAdjacentHTML("beforeend", `
+          <div id="${bubbleId}" class="self-start bg-[#1A237E] px-5 py-3 rounded-2xl text-white max-w-[80%] shadow space-y-2"></div>
+        `);
+        const el = document.getElementById(bubbleId);
+        if (rich) el.innerHTML = renderMarkdownish(reply);
+        else typeWriterEffect(el, reply);
+      } else {
+        let src = null;
+        if (data.image_url) src = data.image_url;
+        else if (data.image_b64) src = `data:image/png;base64,${data.image_b64}`;
+        else if (data.image_file) src = data.image_file.startsWith("/") ? data.image_file : `/${data.image_file}`;
+
+        if (src){
+          chatBox?.insertAdjacentHTML("beforeend", `
+            <div class="self-start bg-white px-5 py-3 rounded-2xl text-gray-800 max-w-[95%] shadow">
+              <p class="mb-2">✨ Here’s your vision:</p>
+              <img src="${src}" alt="Your Vision" class="rounded-lg shadow-md w-full h-auto"/>
+            </div>
+          `);
+        } else {
+          chatBox?.insertAdjacentHTML("beforeend", `
+            <div class="self-start bg-red-50 text-red-700 px-4 py-3 rounded-2xl border border-red-200 max-w-[90%]">
+              Sorry—couldn’t render an image. Check console for details.
+            </div>
+          `);
+          console.error("No renderable image in response:", data);
+        }
+      }
+
+      chatBox?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
+    } catch (err){
+      console.error(err);
+      removeTypingIndicator(typingId);
+      chatBox?.insertAdjacentHTML("beforeend", `
+        <div class="self-start bg-red-50 text-red-700 px-4 py-3 rounded-2xl border border-red-200 max-w-[90%]">
+          Network error. Please try again.
+        </div>
+      `);
+      chatBox?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
+    }
+  });
+});
+</script>
+
+
+{% endblock %}
